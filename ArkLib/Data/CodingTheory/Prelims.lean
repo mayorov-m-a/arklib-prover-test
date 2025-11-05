@@ -4,11 +4,11 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Katerina Hristova, František Silváši, Julian Sutherland
 -/
 
+import Mathlib.LinearAlgebra.Matrix.Rank
+import Mathlib.LinearAlgebra.AffineSpace.AffineSubspace.Defs
+import ArkLib.Data.Fin.Basic
 import Mathlib.Algebra.Lie.OfAssociative
-import Mathlib.Data.Matrix.Rank
 import Mathlib.LinearAlgebra.AffineSpace.Pointwise
-
-
 
 noncomputable section
 
@@ -24,24 +24,25 @@ def neqCols [DecidableEq F] (U V : Matrix ι ι' F) : Finset ι' :=
   {j | ∃ i : ι, V i j ≠ U i j}
 
 section
+open Module Submodule
 
 variable [Semiring F] (U : Matrix ι ι' F)
 
 /-- The submodule spanned by the rows of a matrix. -/
 def rowSpan : Submodule F (ι' → F) :=
-  Submodule.span F {U i | i : ι}
+  span F {U i | i : ι}
 
 /-- The row rank of a matrix (dimension of the row span). -/
 def rowRank : ℕ :=
-  Module.finrank F (rowSpan U)
+  finrank F (rowSpan U)
 
 /-- The submodule spanned by the columns of a matrix. -/
 def colSpan : Submodule F (ι → F) :=
-  Submodule.span F {Matrix.transpose U i | i : ι'}
+  span F {transpose U i | i : ι'}
 
 /-- The column rank of a matrix (dimension of the column span). -/
 def colRank : ℕ :=
-  Module.finrank F (colSpan U)
+  finrank F (colSpan U)
 
 
 end

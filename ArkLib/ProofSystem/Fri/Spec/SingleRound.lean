@@ -194,17 +194,15 @@ private lemma witness_lift {F : Type} [NonBinaryField F]
           )
         simp
 
-instance {i : Fin (k + 1)} : ∀ j, OracleInterface (OracleStatement D x s i j) :=
-  fun _ => inferInstance
+def roundOracleContext {i : Fin (k + 1)} :
+    OracleContext (Fin (i + 1)) (ReaderM (OracleStatement D x s i j))
 
 instance : ∀ j, OracleInterface (FinalOracleStatement D x s j) :=
   fun j =>
     if h : j = k + 1
     then {
-           Query := Unit
-           Response := F[X]
-           answer := cast (by simp [h, FinalOracleStatement])
-                          (id (α := Unit → F[X]))
+           spec := Unit →ₒ F[X]
+           impl _ := sorry
          }
     else {
            Query :=

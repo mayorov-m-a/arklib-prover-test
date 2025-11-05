@@ -2531,9 +2531,7 @@ lemma NTTStage_correctness (i : Fin (ℓ))
             simp only [h_k, ↓reduceIte]
         rw [h_get_lsb_eq]
         apply Nat.sum_of_and_eq_zero_is_or h_lsb_and_two_pow_eq_zero
-
       congr
-      simp_rw [h_v_eq]
 
     rw [h_even_split, h_odd_split]
     rw [h_P_i_split_even_odd]
@@ -2677,7 +2675,8 @@ lemma NTTStage_correctness (i : Fin (ℓ))
           simp only [beq_iff_eq, h_ne_i_eq_k, ↓reduceIte, Nat.xor_zero]
         else
           simp only [h_k, ↓reduceIte]
-
+      -- dtumad: added in the 4.24 update
+      stop
       simp_rw [h_v_eq]
 
     have h_odd_split: input_buffer j = eval x1

@@ -14,99 +14,55 @@ open OracleSpec OracleComp
 
 universe u v
 
-variable {ι : Type} {α β γ : Type}
+variable {α β γ : Type}
 
 /-- A function that implements the oracle interface specified by `spec`, and queries no further
   oracles.
 -/
-def OracleSpec.FunctionType (spec : OracleSpec ι) := (i : ι) → spec.domain i → spec.range i
+def OracleSpec.FunctionType {ι} (spec : OracleSpec ι) := (t : spec.Domain) → spec.Range t
 
 namespace OracleSpec
 
-variable {ι : Type} {spec : OracleSpec ι}
+variable {ι} {spec : OracleSpec ι}
 
 -- def QueryLog.getQueriesFromIdx (log : QueryLog spec) (i : ι) :
---     List (spec.domain i × spec.range i) :=
+--     List (spec.Domain i × spec.Range i) :=
 --   log i
 
 end OracleSpec
 
 namespace OracleComp
 
-variable {ι : Type} {spec : OracleSpec ι} {α σ : Type}
+variable {ι} {spec : OracleSpec ι} {α σ : Type}
 
 /-- Run an oracle computation `OracleComp spec α` with an oracle coming from
   a (deterministic) function `f` that queries no further oracles.
 
   TODO: add state for `f`
 -/
-def runWithOracle (f : spec.FunctionType) : OracleComp spec α → Option α :=
-  OracleComp.construct' (spec := spec) (C := fun _ => Option α)
-    -- For a pure value, return that value successfully
-    (fun x => some x)
-    -- When a query bind is made, run the oracle function `f` and compute on the result
-    (fun i q _ g => g (f i q))
-    -- If the computation fails, return `none`
-    (none)
+@[reducible]
+def runWithOracle (f : (t : spec.Domain) → spec.Range t)
+    (mx : OracleComp spec α) : Option α :=
+  let f' : QueryImpl spec Id := f
+  simulateQ f' mx
 
 @[simp]
-theorem runWithOracle_pure (f : spec.FunctionType) (a : α) :
+theorem runWithOracle_pure (f : (t : spec.Domain) → spec.Range t) (a : α) :
     runWithOracle f (pure a) = some a := by
-  unfold runWithOracle OracleComp.construct'
-  simp only [construct_pure]
-
-@[simp]
-theorem runWithOracle_freeMonad_pure_some (f : spec.FunctionType) (a : α) :
-    runWithOracle f (FreeMonad.pure (a : Option α)) = a := by
-  exact rfl
-
-@[simp]
-theorem runWithOracle_freeMonad_pure_none (f : spec.FunctionType) :
-    runWithOracle f (FreeMonad.pure (none : Option α)) = none := by
-  exact rfl
-
-@[simp]
-theorem runWithOracle_freeMonad_pure (f : spec.FunctionType) (a : Option α) :
-    runWithOracle f (FreeMonad.pure a) = a := by
-  cases a with
-  | none => simp only [runWithOracle_freeMonad_pure_none]
-  | some val => simp only [runWithOracle_freeMonad_pure_some]
-
-@[simp]
-theorem runWithOracle_freeMonad_query_roll (f : spec.FunctionType)
-    (i : ι) (t : spec.domain i)
-    (r : (spec.range i) → FreeMonad (spec.OracleQuery) (Option α)) :
-    runWithOracle f (FreeMonad.roll (query i t) r) = runWithOracle f (r (f i t)) := by
+  simp [runWithOracle]
   rfl
 
 @[simp]
-theorem runWithOracle_bind (f : spec.FunctionType)
+theorem runWithOracle_bind (f : (t : spec.Domain) → spec.Range t)
     (oa : OracleComp spec α) (ob : α → OracleComp spec β) :
     runWithOracle f (oa >>= ob) =
     (runWithOracle f oa) >>=
     (fun x => runWithOracle f (ob x)) := by
-  induction oa generalizing β f ob with
-  | pure x =>
-    cases x with
-    | some a => rfl
-    | none => rfl
-  | roll x r ih =>
-    cases x with
-    | query i t =>
-      simp only [runWithOracle_freeMonad_query_roll, Option.bind_eq_bind]
-      simp only [Option.bind_eq_bind] at ih
-      specialize ih (f i t) f ob
-      rw [<-ih]
-      rfl
-
-@[simp]
-theorem runWithOracle_failure (f : spec.FunctionType) :
-    runWithOracle f (failure : OracleComp spec α) = none := by
-  unfold runWithOracle OracleComp.construct'
-  simp only [construct_failure]
+  simp
+  rfl
 
 -- Oracle with bounded use; returns `default` if the oracle is used more than `bound` times.
--- We could then have the range be an `Option` type, so that `default` is `none`.
+-- We could then have the Range be an `Option` type, so that `default` is `none`.
 -- def boundedUseOracle {ι : Type} [DecidableEq ι] {spec : OracleSpec ι} (bound : ι → ℕ) :
 --     spec →[ι → ℕ]ₛₒ spec := fun i query queryCount =>
 --   if queryCount i > bound i then
@@ -119,16 +75,6 @@ theorem runWithOracle_failure (f : spec.FunctionType) :
 -- def singleUseOracle {ι : Type} [DecidableEq ι] {spec : OracleSpec ι} :
 --     spec →[ι → ℕ]ₛₒ spec :=
 --   boundedUseOracle (fun _ ↦ 1)
-
-@[simp]
-theorem OracleSpec.append_range_left {ι₁ ι₂ : Type} {spec₁ : OracleSpec ι₁} {spec₂ : OracleSpec ι₂}
-    (i : ι₁) : (spec₁ ++ₒ spec₂).range (Sum.inl i) = spec₁.range i := by
-  simp [append, OracleSpec.range]
-
-@[simp]
-theorem OracleSpec.append_range_right {ι₁ ι₂ : Type} {spec₁ : OracleSpec ι₁} {spec₂ : OracleSpec ι₂}
-    (i : ι₂) : (spec₁ ++ₒ spec₂).range (Sum.inr i) = spec₂.range i := by
-  simp [append, OracleSpec.range]
 
 -- set_option linter.unusedVariables false in
 -- /-- `SatisfiesM` for `OracleComp` -/
@@ -168,23 +114,23 @@ theorem OracleSpec.append_range_right {ι₁ ι₂ : Type} {spec₁ : OracleSpec
 --     | failure' _ => by sorry
 
 /-- True if every non-`none` element of the cache has that same value in the oracle -/
-def Oracle.containsCache {ι : Type} {spec : OracleSpec ι}
-    (f : spec.FunctionType) (cache : spec.QueryCache) :
+def Oracle.containsCache {spec : OracleSpec ι}
+    (f : (t : spec.Domain) → spec.Range t) (cache : spec.QueryCache) :
     Prop :=
-  ∀ i q r, cache i q = some r → f i q = r
+  ∀ q r, cache q = some r → f q = r
 
 /-- For any cache, there is a function to contain it -/
-lemma Oracle.containsCache_of_cache {ι : Type} {spec : OracleSpec ι}
-    [(i : ι) → Inhabited (OracleSpec.range spec i)]
+lemma Oracle.containsCache_of_cache {spec : OracleSpec ι}
+    [spec.Inhabited]
     (cache : spec.QueryCache) :
-    ∃ (f : spec.FunctionType), Oracle.containsCache f cache := by
-  use fun i q =>
-    match cache i q with
+    ∃ (f : (t : spec.Domain) → spec.Range t), Oracle.containsCache f cache := by
+  use fun q =>
+    match cache q with
     | none => default
     | some r => r
   unfold Oracle.containsCache
-  intro i q r h
-  cases cache i q with
+  intro q r h
+  cases cache q with
   | none => simp_all
   | some val => simp_all
 
@@ -193,15 +139,16 @@ For a particular cache, the oracle never fails on that cache
 iff it never fails when run with any oracle function that is compatible with the cache.
 -/
 theorem randomOracle_cache_neverFails_iff_runWithOracle_neverFails {β}
-    [DecidableEq ι] [spec.DecidableEq] [(i : ι) → SelectableType (OracleSpec.range spec i)]
+    [spec.DecidableEq] [(t : spec.Domain) → SampleableType (spec.Range t)]
     (oa : OracleComp (spec) β) (preexisting_cache : spec.QueryCache)
     :
-    ((oa.simulateQ randomOracle).run preexisting_cache).neverFails
+    HasEvalSPMF.NeverFail ((simulateQ randomOracle oa).run preexisting_cache)
     ↔
-    (∀ (f : spec.FunctionType),
+    (∀ (f : (t : spec.Domain) → spec.Range t),
       Oracle.containsCache f preexisting_cache →
       (runWithOracle f oa).isSome) := by
-  haveI : (i : ι) → Inhabited (OracleSpec.range spec i) := by
+  stop
+  haveI : (i : ι) → Inhabited (OracleSpec.Range spec i) := by
     sorry
   -- todo
   -- ((oa.simulateQ randomOracle).run preexisting_cache).neverFails ↔ never fails for any supercache
@@ -216,7 +163,7 @@ theorem randomOracle_cache_neverFails_iff_runWithOracle_neverFails {β}
     | none =>
       simp_all only [StateT.run_bind, StateT.run_monadLift, monadLift_self, bind_pure_comp,
         StateT.run_modifyGet, Functor.map_map, neverFails_map_iff, neverFails_uniformOfFintype,
-        support_map, support_uniformOfFintype, Set.image_univ, Set.mem_range, Prod.mk.injEq,
+        support_map, support_uniformOfFintype, Set.image_univ, Set.mem_Range, Prod.mk.injEq,
         exists_eq_left, forall_eq', true_and]
       constructor
       · intro h f hf
@@ -232,11 +179,10 @@ For a particular oracle function, the computation succeeds with that oracle func
 iff it succeeds when initialized with a cache that contains all of data from that oracle function.
 -/
 theorem runWithOracle_succeeds_iff_simulateQ_randomOracle_neverFails
-     {β}
-    [DecidableEq ι] [spec.DecidableEq] [(i : ι) → SelectableType (OracleSpec.range spec i)]
-    (oa : OracleComp (spec) β) (f : spec.FunctionType) :
+     {β} [spec.DecidableEq] [(t : spec.Domain) → SampleableType (spec.Range t)]
+    (oa : OracleComp (spec) β) (f : (t : spec.Domain) → spec.Range t) :
     (runWithOracle f oa).isSome ↔
-    ((oa.simulateQ randomOracle).run (fun i q => some (f i q))).neverFails := by
+    (HasEvalSPMF.NeverFail ((simulateQ randomOracle oa).run (fun q => some (f q)))) := by
   sorry
 
 /--
@@ -244,18 +190,18 @@ The oracle never fails on any cache
 iff it never fails when run with any oracle function.
 -/
 theorem randomOracle_neverFails_iff_runWithOracle_neverFails {β}
-    [DecidableEq ι] [spec.DecidableEq] [(i : ι) → SelectableType (OracleSpec.range spec i)]
+    [spec.DecidableEq] [(t : spec.Domain) → SampleableType (spec.Range t)]
     (oa : OracleComp (spec) β)
     :
-    (∀ (preexisting_cache : spec.QueryCache),
-      ((oa.simulateQ randomOracle).run preexisting_cache).neverFails)
+    (∀ (preexisting_cache : spec.QueryCache), HasEvalSPMF.NeverFail
+      ((simulateQ randomOracle oa).run preexisting_cache))
     ↔
-    (∀ (f : spec.FunctionType),
+    (∀ (f : (t : spec.Domain) → spec.Range t),
       (runWithOracle f oa).isSome) := by
   constructor
   · intro h f
     rw [runWithOracle_succeeds_iff_simulateQ_randomOracle_neverFails]
-    exact h fun i q ↦ some (f i q)
+    exact h fun q ↦ some (f q)
   · intro h preexisting_cache
     sorry
 
@@ -272,7 +218,7 @@ variable {ι : Type u} [DecidableEq ι] {spec : OracleSpec ι} [spec.DecidableEq
 /-- Compose a query implementation from `spec` to some monad `m`, with a further monad homomorphism
   from `m` to `m'`. -/
 def composeM {m' : Type u → Type v} [Monad m'] (hom : m →ᵐ m') (so : QueryImpl spec m) :
-    QueryImpl spec m' where
-  impl | query i t => hom (so.impl (query i t))
+    QueryImpl spec m' :=
+  fun t => hom (so t)
 
 end QueryImpl
