@@ -117,8 +117,8 @@ noncomputable def δ_ε_proximityGap {α : Type} [DecidableEq α] [Nonempty α]
   (P : Finset (ι → α)) (C : Set (Finset (ι → α))) (δ ε : ℝ≥0) : Prop :=
   ∀ S ∈ C, ∀ [Nonempty S],
   Xor'
-  ( Pr_{let x ← $ᵖ S}[Code.relHammingDistToCode x.1 P ≤ δ] = 1 )
-  ( Pr_{let x ← $ᵖ S}[Code.relHammingDistToCode x.1 P ≤ δ] ≤ ε )
+  ( Pr_{let x ←$ᵖ S}[Code.relHammingDistToCode x.1 P ≤ δ] = 1 )
+  ( Pr_{let x ←$ᵖ S}[Code.relHammingDistToCode x.1 P ≤ δ] ≤ ε )
 end
 
 section
@@ -640,5 +640,328 @@ lemma exists_points_with_large_matching_subset
 
 end ProximityGapSection5
 end
+
+section ProximityGapSection6
+variable {F : Type} [Field F] [Fintype F] [DecidableEq F] [DecidableEq (RatFunc F)]
+variable {n k m : ℕ} [NeZero n]
+
+/-- An affine curve parameterized by the field
+    and whose defining vectors are the vectors
+    `u 0, ..., u (n - 1)`.
+-/
+def curve {l : ℕ} (u : Fin l → Fin n → F) (z : F) : Fin n → F :=
+    ∑ i, z ^ i.1 • u i
+
+/-- The parameters for which the curve points are
+    `δ`-close to a set `V` (typically, a linear code).
+    The set `S` from the proximity gap paper.
+-/
+def coeffs_of_close_proximity_curve {l : ℕ}
+  (δ : ℚ) (u : Fin l → Fin n → F) (V : Finset (Fin n → F)) : Finset F :=
+  @Set.toFinset _ { z | δᵣ(curve u z, V) ≤ δ} sorry
+
+/-- If the set of points `δ`-close to the code `V` has
+    at least `n * l + 1` points then 
+    there exists a curve defined by vectors `v` from `V`
+    such that the points of `curve u` and `curve v`
+    are `δ`-close with the same parameters.
+    Moreover, `u` and `v` differ at at most `δ * n`
+    positions.
+-/
+theorem large_agreement_set_on_curve_implies_correlated_agreement {l : ℕ}
+  {rho : ℚ}
+  {δ : ℚ}
+  {V : Finset (Fin n → F)}
+  (hδ : δ ≤ (1 - rho) / 2)
+  {u : Fin l → Fin n → F}
+  (hS : n * l < (coeffs_of_close_proximity_curve δ u V).card)
+  :
+  coeffs_of_close_proximity_curve δ u V = F ∧
+  ∃ (v : Fin l → Fin n → F),
+    ∀ z, δᵣ(curve u z, curve v z) ≤ δ ∧
+    ({ x : Fin n | Finset.image u ≠ Finset.image v } : Finset _).card ≤ δ * n := by
+  sorry
+
+/-- The distance bound from the proximity gap paper.
+-/
+noncomputable def δ₀ (rho : ℚ) (m : ℕ) : ℝ :=
+  1 - Real.sqrt rho - Real.sqrt rho / (2 * m)
+
+/-- If the set of points on the curve defined by `u`
+    close to `V` has at least
+    `((1 + 1 / (2 * m)) ^ 7 * m ^ 7) / (3 * (Real.rpow rho (3 / 2 : ℚ)))
+    * n ^ 2 * l + 1` points then 
+    there exist vectors `v` from `V` that
+    `(1 - δ) * n` close to vectors `u`.
+-/
+theorem large_agreement_set_on_curve_implies_correlated_agreement' {l : ℕ}
+  [Finite F]
+  {m : ℕ}
+  {rho : ℚ}
+  {δ : ℚ}
+  (hm : 3 ≤ m)
+  {V : Finset (Fin n → F)}
+  (hδ : δ ≤ δ₀ rho m)
+  {u : Fin l → Fin n → F}
+  (hS : ((1 + 1 / (2 * m)) ^ 7 * m ^ 7) / (3 * (Real.rpow rho (3 / 2 : ℚ)))
+    * n ^ 2 * l < (coeffs_of_close_proximity_curve δ u V).card)
+  :
+  ∃ (v : Fin l → Fin n → F),
+  ∀ i, v i ∈ V ∧
+  (1 - δ) * n ≤ ({x : Fin n | ∀ i, u i x = v i x} : Finset _).card := sorry
+
+section
+open NNReal Finset Function
+
+open scoped BigOperators
+open scoped ReedSolomonCode
+
+variable {l : ℕ} [NeZero l]
+         {ι : Type} [Fintype ι] [Nonempty ι]
+         {F : Type} [Field F] [Fintype F] [DecidableEq F]
+
+
+open scoped Pointwise in
+open scoped ProbabilityTheory in
+open Uniform in
+/-- Lemma 6.3 from the proximity gap paper.
+-/
+theorem average_proximity_implies_proximity_of_linear_subspace [DecidableEq ι] [DecidableEq F]
+  {u : Fin (l + 2) → ι → F} {k : ℕ} {domain : ι ↪ F} {δ : ℝ≥0}
+  (hδ : δ ∈ Set.Ioo 0 (1 - (ReedSolomonCode.sqrtRate (k + 1) domain))) :
+  letI U' : Finset (ι → F) :=
+    SetLike.coe (affineSpan F (Finset.univ.image (Fin.tail u))) |>.toFinset
+  letI U : Finset (ι → F) := u 0 +ᵥ U'
+  haveI : Nonempty U := sorry
+  letI ε : ℝ≥0 := ProximityGap.errorBound δ (k + 1) domain
+  letI V := ReedSolomon.code domain (k + 1)
+  Pr_{let u ←$ᵖ U}[δᵣ(u.1, V) ≤ δ] > ε → ∀ u' ∈ U', δᵣ(u', V) ≤ δ := by
+  sorry
+
+end
+
+end ProximityGapSection6
+
+section ProximityGapSection7
+
+variable {F : Type} [Field F] [DecidableEq F] [DecidableEq (RatFunc F)]
+variable {n k m : ℕ}
+
+namespace WeightedAgreement
+
+open NNReal Finset Function
+
+open scoped BigOperators
+
+section
+
+variable {n : Type} [Fintype n] [DecidableEq n]
+
+variable {ι : Type} [Fintype ι] [Nonempty ι]
+variable {F : Type} [Field F] [Fintype F] [DecidableEq F]
+
+variable (C : Submodule F (n → F)) [DecidablePred (· ∈ C)]
+         (μ : ι → Set.Icc (0 : ℚ) 1)
+
+/-- Relative μ-agreement between words `u` and `v`. -/
+noncomputable def agree (u v : ι → F) : ℝ :=
+  1 / (Fintype.card ι) * ∑ i ∈ { i | u i = v i }, (μ i).1
+
+/-- `μ`-agreement between a word and a set `V`. -/
+noncomputable def agree_set (u : ι → F) (V : Finset (ι → F)) [Nonempty V] : ℝ :=
+  (Finset.image (agree μ u) V).max' (nonempty_coe_sort.1 (by aesop))
+
+/-- Weighted size of a subdomain. -/
+noncomputable def mu_set (ι' : Finset ι) : ℝ :=
+  1/ι'.card * ∑ i ∈ ι', (μ i).1
+
+/-- `μ`-weighted correlated agreement. -/
+noncomputable def weightedCorrelatedAgreement
+  (C : Set (ι → F)) [Nonempty C] {k : ℕ} (U : Fin k → ι → F) : ℝ :=
+  sSup {x |
+    ∃ D' ⊆ (Finset.univ (α := ι)),
+      x = mu_set μ D' ∧
+      ∃ v : Fin k → ι → F, ∀ i, v i ∈ C ∧ ∀ j ∈ D', v i j = U i j
+  }
+
+open ReedSolomonCode
+
+instance {domain : ι ↪ F} {deg : ℕ} : Nonempty (finCarrier domain deg) := by
+  unfold finCarrier
+  apply Nonempty.to_subtype
+  simp [ReedSolomon.code]
+  exact Submodule.nonempty (Polynomial.degreeLT F deg)
+
+open ProbabilityTheory in
+/-- Weighted correlated agreement over curves.
+    Take a Reed-Solomon code of length `ι` and degree `deg`, a proximity-error parameter
+pair `(δ, ε)` and a curve generated by vectors `u`, such that the probability that a random 
+point on the curve is `δ`-close to Reed-Solomon code is at most `ε`.
+Then, the words `u` have weighted correlated agreement.
+-/
+theorem weighted_correlated_agreement_for_parameterized_curves 
+  [DecidableEq ι] [Fintype ι] [DecidableEq F] [Fintype F]
+  {l : ℕ}
+  {k : ℕ} {u : Fin (l + 2) → ι → F}
+  {deg : ℕ} {domain : ι ↪ F} {δ : ℝ≥0}
+  {μ : ι → Set.Icc (0 : ℚ) 1}
+  {M : ℕ}
+  {α : ℝ≥0}
+  (hμ : ∀ i, ∃ n : ℤ, (μ i).1 = (n : ℚ) / (M : ℚ)) :
+  letI sqrtRate := ReedSolomonCode.sqrtRate deg domain
+  (hα : sqrtRate < α) →
+  (hα₁ : α < 1) →
+  letI ε := ProximityGap.errorBound δ deg domain
+  letI pr :=
+    let curve := Curve.parametrisedCurveFinite u
+    Pr_{let u ←$ᵖ curve}[agree_set μ u (finCarrier domain deg) ≥ α]
+  (hproximity : pr > (l + 1 : NNReal) * ε) →
+  (h_additionally : pr ≥
+    ENNReal.ofReal (
+      ((l + 1) * (M * Fintype.card ι + 1) : ℝ) / (Fintype.card F : ℝ)
+      *
+      (1 / min (α - sqrtRate) (sqrtRate / 20) + 3 / sqrtRate)
+    )
+  ) →
+  ∃ ι' : Finset ι, ∃ v : Fin (l + 2) → ι → F,
+    (∀ i, v i ∈ ReedSolomon.code domain deg) ∧
+    mu_set μ ι' ≥ α ∧
+    ∀ i, ∀ x ∈ ι', u i x = v i x := sorry
+
+/-- Weighted correlated agreement over curves.
+Take a Reed-Solomon code of length `ι` and degree `deg`, a proximity-error parameter
+pair `(δ, ε)` and a curve generated by vectors `u`, such that the probability that a random 
+point on the curve is `δ`-close to Reed-Solomon code is at most `ε`.
+Then, the words `u` have weighted correlated agreement.
+
+Version with different bounds.
+-/
+theorem weighted_correlated_agreement_for_parameterized_curves'
+  [DecidableEq ι] [Fintype ι] [DecidableEq F] {k l : ℕ} {u : Fin (l + 2) → ι → F}
+  {deg : ℕ} {domain : ι ↪ F} {δ : ℝ≥0}
+  {μ : ι → Set.Icc (0 : ℚ) 1}
+  {M m : ℕ}
+  (hm : 3 ≤ m)
+  (hμ : ∀ i, ∃ n : ℤ, (μ i).1 = (n : ℚ) / (M : ℚ))
+  {α : ℝ≥0} :
+  letI sqrtRate := ReedSolomonCode.sqrtRate deg domain
+  letI S : Finset F := {
+    z : F | agree_set μ (fun i ↦ ∑ j, z ^ j.1 * u j i) (finCarrier domain deg) ≥ α
+  }
+  (hα : sqrtRate * (1 + 1 / (2 * m : ℝ)) ≤ α) →
+  (hS :
+    Finset.card S >
+      max ((1 + 1 / (2 * m : ℝ))^7 * m^7 * (Fintype.card ι)^2 * (l + 1) / (3 * sqrtRate^3))
+          ((2 * m + 1) * (M * Fintype.card ι + 1) * (l + 1) / sqrtRate.toReal)
+    ) →
+  ∃ v : Fin (l + 2) → ι → F,
+    (∀ i, v i ∈ ReedSolomon.code domain deg) ∧
+    mu_set μ {i : ι | ∀ j, u j i = v j i} ≥ α := sorry
+
+open Uniform in
+open scoped Pointwise in
+open ProbabilityTheory in
+/-- Weighted correlated agreement over affine spaces.
+Take a Reed-Solomon code of length `ι` and degree `deg`, a proximity-error parameter
+pair `(δ, ε)` and an affine space generated by vectors `u`, such that the probability that a random 
+point from the space is `δ`-close to Reed-Solomon code is at most `ε`.
+Then, the words `u` have weighted correlated agreement.
+-/
+theorem weighted_correlated_agreement_over_affine_spaces 
+  [DecidableEq ι] [Fintype ι] [DecidableEq F] {k l : ℕ} {u : Fin (l + 2) → ι → F}
+  {deg : ℕ} {domain : ι ↪ F}
+  {μ : ι → Set.Icc (0 : ℚ) 1}
+  {M : ℕ}
+  {α : ℝ≥0} :
+  letI sqrtRate := ReedSolomonCode.sqrtRate deg domain
+  (hα : sqrtRate < α) →
+  (hα₁ : α < 1) →
+  (hμ : ∀ i, ∃ n : ℤ, (μ i).1 = (n : ℚ) / (M : ℚ)) →
+  letI ε := ProximityGap.errorBound α deg domain
+  letI pr :=
+    Pr_{let u ←$ᵖ (u 0 +ᵥ affineSpan F (Finset.univ.image (Fin.tail u)).toSet)
+    }[agree_set μ u (finCarrier domain deg) ≥ α]
+  pr > ε →
+  pr ≥ ENNReal.ofReal (
+         ((M * Fintype.card ι + 1) : ℝ) / (Fintype.card F : ℝ)
+         *
+         (1 / min (α - sqrtRate) (sqrtRate / 20) + 3 / sqrtRate)
+       ) →
+  ∃ ι' : Finset ι, ∃ v : Fin (l + 2) → ι → F,
+    (∀ i, v i ∈ ReedSolomon.code domain deg) ∧
+    mu_set μ ι' ≥ α ∧
+    ∀ i, ∀ x ∈ ι', u i x = v i x := by sorry
+
+open scoped ProbabilityTheory in
+open scoped Pointwise in
+open Uniform in
+/-- Weighted correlated agreement over affine spaces.
+Take a Reed-Solomon code of length `ι` and degree `deg`, a proximity-error parameter
+pair `(δ, ε)` and an affine space generated by vectors `u`, such that the probability that a random 
+point from the space is `δ`-close to Reed-Solomon code is at most `ε`.
+Then, the words `u` have weighted correlated agreement.
+
+Version with different bounds.
+-/
+theorem weighted_correlated_agreement_over_affine_spaces' 
+  [DecidableEq ι] [Fintype ι] [DecidableEq F] {k l : ℕ} {u : Fin (l + 2) → ι → F}
+  {deg : ℕ} {domain : ι ↪ F}
+  {μ : ι → Set.Icc (0 : ℚ) 1}
+  {α : ℝ≥0}
+  {M m : ℕ}
+  (hm : 3 ≤ m)
+  (hμ : ∀ i, ∃ n : ℤ, (μ i).1 = (n : ℚ) / (M : ℚ)) :
+  letI sqrtRate := ReedSolomonCode.sqrtRate deg domain
+  letI pr :=
+    Pr_{let u ←$ᵖ (u 0 +ᵥ affineSpan F (Finset.univ.image (Fin.tail u)).toSet)
+    }[agree_set μ u (finCarrier domain deg) ≥ α]
+  (hα : sqrtRate * (1 + 1 / (2 * m : ℝ)) ≤ α) →
+  letI numeratorl : ℝ := (1 + 1 / (2 * m : ℝ))^7 * m^7 * (Fintype.card ι)^2
+  letI denominatorl : ℝ := (3 * sqrtRate^3) * Fintype.card F
+  letI numeratorr : ℝ := (2 * m + 1) * (M * Fintype.card ι + 1)
+  letI denominatorr : ℝ := sqrtRate * Fintype.card F
+  pr > ENNReal.ofReal (max (numeratorl / denominatorl) (numeratorr / denominatorr)) →
+  ∃ v : Fin (l + 2) → ι → F,
+    (∀ i, v i ∈ ReedSolomon.code domain deg) ∧
+    mu_set μ {i : ι | ∀ j, u j i = v j i} ≥ α := by sorry
+
+/-- Lemma 7.5 from the proximity gap paper. -/
+lemma list_agreement_on_curve_implies_correlated_agreement_bound 
+  [DecidableEq ι] [Fintype ι] [DecidableEq F] {k l : ℕ} {u : Fin (l + 2) → ι → F}
+  {deg : ℕ} {domain : ι ↪ F}
+  {μ : ι → Set.Icc (0 : ℚ) 1}
+  {α : ℝ≥0}
+  {v : Fin (l + 2) → ι → F}
+  (hv : ∀ i, v i ∈ (ReedSolomon.code domain deg))
+  {S' : Finset F}
+  (hS'_card : S'.card > l + 1) :
+  letI w (x : ι) (z : F) : F := ∑ i, z ^ i.1 * u i x
+  letI wtilde (x : ι) (z : F) : F := ∑ i, z ^ i.1 * v i x
+  (hS'_agree : ∀ z ∈ S', agree μ (w · z) (wtilde · z) ≥ α) →
+  mu_set μ {x : ι | ∀ i, u i x = v i x} >
+  α - ((l + 1) : ℝ) / (S'.card - (l + 1)) := by sorry
+
+/-- Lemma 7.6 from the proximity gap paper. -/
+lemma sufficiently_large_list_agreement_on_curve_implies_correlated_agreement
+  [DecidableEq ι] [Fintype ι] [DecidableEq F] {k l : ℕ} {u : Fin (l + 2) → ι → F}
+  {deg : ℕ} {domain : ι ↪ F}
+  {μ : ι → Set.Icc (0 : ℚ) 1}
+  {α : ℝ≥0}
+  {M : ℕ}
+  (hμ : ∀ i, ∃ n : ℤ, (μ i).1 = (n : ℚ) / (M : ℚ))
+  {v : Fin (l + 2) → ι → F}
+  (hv : ∀ i, v i ∈ ReedSolomon.code domain deg)
+  {S' : Finset F}
+  (hS'_card : S'.card > l + 1)
+  (hS'_card₁ : S'.card ≥ (M * Fintype.card ι + 1) * (l + 1)) :
+  letI w (x : ι) (z : F) : F := ∑ i, z ^ i.1 * u i x
+  letI wtilde (x : ι) (z : F) : F := ∑ i, z ^ i.1 * v i x
+  (hS'_agree : ∀ z ∈ S', agree μ (w · z) (wtilde · z) ≥ α) →
+  mu_set μ {x : ι | ∀ i, u i x = v i x} ≥ α := by sorry
+end
+
+end WeightedAgreement
+
+end ProximityGapSection7
 
 end ProximityGap
