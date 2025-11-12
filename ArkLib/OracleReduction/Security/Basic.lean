@@ -63,6 +63,7 @@ namespace Reduction
 
 section Completeness
 
+
 /-- A reduction satisfies **completeness** with regards to:
   - an initialization function `init : ProbComp σ` for some ambient state `σ`,
   - a stateful query implementation `impl` (in terms of `StateT σ ProbComp`)
@@ -162,7 +163,7 @@ theorem perfectCompleteness_eq_prob_one :
         [fun ⟨⟨_, (prvStmtOut, witOut)⟩, stmtOut⟩ =>
           (stmtOut, witOut) ∈ relOut ∧ prvStmtOut = stmtOut
         | do (simulateQ (impl ++ₛₒ challengeQueryImpl : QueryImpl _ (StateT σ ProbComp))
-            <| reduction.run stmtIn witIn).run' (← init)] = 1 := by
+          <| reduction.run stmtIn witIn).run' (← init)] = 1 := by
   refine forall_congr' fun stmtIn => forall_congr' fun stmtOut => forall_congr' fun _ => ?_
   rw [ENNReal.coe_zero, tsub_zero, ge_iff_le, OracleComp.one_le_probEvent_iff,
     probEvent_eq_one_iff, Prod.forall]
@@ -482,7 +483,7 @@ section Trivial
 @[simp]
 theorem Reduction.id_perfectCompleteness {rel : Set (StmtIn × WitIn)} (hInit : init.neverFails) :
     (Reduction.id : Reduction oSpec _ _ _ _ _).perfectCompleteness init impl rel rel := by
-  simp [hInit]
+  simp [perfectCompleteness, completeness, hInit]
   aesop
 
 /-- The identity / trivial verifier is perfectly sound. -/
@@ -519,7 +520,8 @@ theorem OracleReduction.id_perfectCompleteness
     (hInit : init.neverFails) :
     (OracleReduction.id : OracleReduction oSpec _ _ _ _ _ _ _).perfectCompleteness
       init impl rel rel := by
-  simp [perfectCompleteness, hInit]
+  simp [OracleReduction.perfectCompleteness, Reduction.perfectCompleteness,
+    Reduction.completeness, hInit]
   aesop
 
 /-- The identity / trivial verifier is perfectly sound. -/

@@ -6,6 +6,7 @@ Authors: Quang Dao
 
 import VCVio
 import ArkLib.OracleReduction.Security.Basic
+import ArkLib.Data.Fin.Fold
 
 /-!
   # Commitment Schemes with Oracle Openings
@@ -30,7 +31,7 @@ set_option linter.unusedVariables false
 
 namespace Commitment
 
-open OracleSpec OracleComp SubSpec
+open OracleSpec OracleComp SubSpec ProtocolSpec
 
 variable {ι : Type} (oSpec : OracleSpec ι) (Data Randomness Commitment : Type)
 
@@ -57,29 +58,37 @@ noncomputable section
 
 open scoped NNReal
 
-variable [∀ i, VCVCompatible (pSpec.Challenge i)] [DecidableEq ι]
+variable [DecidableEq ι]
   {oSpec : OracleSpec ι} {Data : Type} [O : OracleInterface Data] {Randomness : Type}
   [Fintype Randomness]
   {Commitment : Type} [oSpec.FiniteRange] {n : ℕ} {pSpec : ProtocolSpec n}
   [∀ i, VCVCompatible (pSpec.Challenge i)]
+  [∀ i, SelectableType (pSpec.Challenge i)]
+  {σ : Type} (init : ProbComp σ) (impl : QueryImpl oSpec (StateT σ ProbComp))
 
 /-- A commitment scheme satisfies **correctness** with error `correctnessError` if for all
   `data : Data`, `randomness : Randomness`, and `query : O.Query`, the probability of accepting upon
-  executing the commitment and opening procedures honestly is at least `1 - correctnessError`. -/
+  executing the commitment and opening procedures honestly is at least `1 - correctnessError`.
+-/
 def correctness (scheme : Scheme oSpec Data Randomness Commitment pSpec)
     (correctnessError : ℝ≥0) : Prop :=
-  ∀ data : Data,
-  ∀ randomness : Randomness,
-  ∀ query : O.Query,
-    [ fun x => x.2.1 | do
-        let cm ← liftComp (scheme.commit data randomness) _
-        let ⟨result, _⟩ ← scheme.opening.run ⟨cm, query, O.answer data query⟩ ⟨data, randomness⟩
-        return result] ≥ 1 - correctnessError
+    ∀ data : Data,
+    ∀ randomness : Randomness,
+    ∀ query : O.Query,
+    [fun ⟨⟨_, (prvStmtOut, witOut)⟩, stmtOut⟩ =>
+      (stmtOut, witOut) ∈ acceptRejectRel ∧ prvStmtOut = stmtOut
+    | do
+        (simulateQ (impl ++ₛₒ challengeQueryImpl : QueryImpl _ (StateT σ ProbComp)) (do
+          let cm ← scheme.commit data randomness
+          scheme.opening.run ⟨cm, query, O.answer data query⟩ ⟨data, randomness⟩
+        )).run' (← init)] ≥ 1 - correctnessError
+
+-- TODO delete: witOut is Unit (from prover), stmtOut is verifier output i.e. accept/rej
 
 /-- A commitment scheme satisfies **perfect correctness** if it satisfies correctness with no error.
 -/
 def perfectCorrectness (scheme : Scheme oSpec Data Randomness Commitment pSpec) : Prop :=
-  correctness scheme 0
+  correctness init impl scheme 0
 
 /-- An adversary in the (evaluation) binding game returns a commitment `cm`, a query `q`, two
   purported responses `r₁, r₂` to the query, and an auxiliary private state (to be passed to the
@@ -158,6 +167,52 @@ def extractability (scheme : Scheme oSpec Data Randomness Commitment pSpec)
 -- TODO: version where the query is chosen according to some public coin?
 
 -- TODO: multi-instance versions?
+
+/-- An adversary in the function binding game returns a commitment `cm`, and a vector of length `L`
+  of queries, claimed responses to the queries, and auxiliary private states (to be passed to the
+  malicious prover in the opening procedure). -/
+def FunctionBindingAdversary (oSpec : OracleSpec ι) (Data Commitment AuxState : Type)
+  [O : OracleInterface Data] (L : ℕ) :=
+  OracleComp oSpec (Commitment × Vector (O.Query × O.Response × AuxState) L)
+
+/-- A commitment scheme satisfies **function binding** with error `functionBindingError` if for all
+adversaries that output a commitment `cm`, and a vector of length `L` of queries `q_i`, claimed
+responses `r_i` to the queries, and auxiliary private states `st_i` (to be passed to the malicious
+prover in the opening procedure), and for all malicious provers in the opening procedure taking in
+`st_i`, the probability that:
+
+  1. The verifier accepts all `r_i` to the respective `q_i` in the opening procedure for `cm`
+  2. There exists no data `d` that is consistent with the claimed responses
+    (i.e.for all data `d`, for some `i`, `O.answer d q_i ≠ r_i`)
+
+  is at most `functionBindingError`.
+
+  Informally, function binding says it's computationally infeasible to convince the
+  verifier to accept responses for which no consistent (source) data exists.
+
+  Note: This is an adaption of the function binding property introduced in https://eprint.iacr.org/2025/902 -/
+def functionBinding {L : ℕ} (hn : n = 1) (hpSpec : NonInteractive (hn ▸ pSpec)) (AuxState : Type)
+    [∀ i, VCVCompatible ((hn ▸ pSpec).Challenge i)]
+    [∀ i, SelectableType ((hn ▸ pSpec).Challenge i)]
+    (scheme : Scheme oSpec Data Randomness Commitment (hn ▸ pSpec))
+    (functionBindingError : ℝ≥0) : Prop :=
+    ∀ adversary : FunctionBindingAdversary oSpec Data Commitment AuxState L,
+    ∀ (prover : Prover oSpec (Commitment × O.Query × O.Response) AuxState Bool Unit (hn ▸ pSpec)),
+      [fun x =>
+        (∀ (i : Fin x.size), x[i].2.2 = true)
+        ∧ (¬ ∃ (d : Data), ∀ (i : Fin x.size), O.answer d x[i].1 = x[i].2.1)
+       | do (simulateQ (impl ++ₛₒ (challengeQueryImpl (pSpec := hn ▸ pSpec)) :
+          QueryImpl _ (StateT σ ProbComp)) <|
+          (do
+            let (cm, claims) ← liftComp adversary _
+            let reduction := Reduction.mk prover scheme.opening.verifier
+            claims.toArray.mapM (fun ⟨q, r, st⟩ =>
+              do
+                let ⟨_, verifier_accept⟩ ← reduction.run (cm, q, r) st
+                return (q, r, verifier_accept)
+              )
+          : OracleComp _ _)).run' (← init)] ≤ functionBindingError
+
 
 /-- A commitment scheme satisfies **hiding** with error `hidingError` if ....
 

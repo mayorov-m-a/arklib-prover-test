@@ -5,6 +5,7 @@ Authors: Quang Dao
 -/
 
 import Mathlib.Algebra.Tropical.Basic
+import Mathlib.Algebra.Polynomial.FieldDivision
 import Mathlib.RingTheory.Polynomial.Basic
 import ArkLib.Data.Array.Lemmas
 
@@ -663,6 +664,66 @@ theorem neg_add_cancel [LawfulBEq R] (p : UniPoly R) : -p + p = 0 := by
   rw [add_coeff?]
   rcases (Nat.lt_or_ge i p.size) with hi | hi <;> simp [hi, Neg.neg, neg]
 
+omit [BEq R] in
+@[simp]
+theorem eval_X (a : R) : UniPoly.eval a UniPoly.X = a := by
+  unfold eval eval₂ X
+  simp [Array.zipIdx, pow_zero, pow_one]
+
+omit [BEq R] in
+@[simp]
+theorem eval_C (x : R) (y : R) : UniPoly.eval x (UniPoly.C y) = y := by
+  unfold eval eval₂ C
+  simp [Array.zipIdx, pow_zero]
+
+theorem monic_X_sub_C (x : R) : monic (UniPoly.X - UniPoly.C x) := by
+  unfold monic
+  sorry
+
+-- lemmas about degree
+
+theorem degree_C [LawfulBEq R] (x : R) (hx : x ≠ 0) : degree (UniPoly.C x) = 1 := by
+  let p : UniPoly R := #[x]
+  have k : Fin p.size := ⟨0, by simp [p]⟩
+  have h_some : p.last_nonzero = some k := by
+    refine Trim.last_nonzero_some_iff.mpr ?_;
+    constructor
+    · simpa [p] using hx
+    · intro j hj hjgt
+      have hjlt1 : j < 1 := by simpa [p] using hj
+      have hj0 : j = 0 := Nat.lt_one_iff.mp hjlt1
+      have : False := by
+        subst hj0
+        simp_all only [ne_eq, List.size_toArray, List.length_cons, List.length_nil, _root_.zero_add,
+        Fin.val_eq_zero, gt_iff_lt, lt_self_iff_false, p]
+      exact False.elim this
+  unfold degree C
+  simp [p, h_some]
+
+theorem degree_C_zero [LawfulBEq R] : degree (UniPoly.C (0 : R)) = 0 := by
+  have : (UniPoly.C (0 : R)).last_nonzero = none := by
+    apply Trim.last_nonzero_none
+    intro i hi
+    -- for C 0 the only possible index is 0, whose value is 0
+    have hi' : i < 1 := by simpa [C] using hi
+    have : i = 0 := Nat.lt_one_iff.mp hi'
+    subst this
+    simp [C]
+  unfold degree
+  simp [this]
+
+theorem degree_sub [Field R] (p q : UniPoly R) : degree (p - q) ≤ max (degree p) (degree q) := by
+  sorry
+
+-- this could and should be much stronger i.e. using trim ≤ deg p - deg q + 1
+theorem degree_divByMonic [Field R] {p q : UniPoly R} (hq : monic q = true) :
+  degree (p.divByMonic q) ≤ degree p := by
+  sorry
+
+-- this could and should be much stronger i.e. using trim ≤ deg p - deg q + 1
+theorem degree_div [Field R] {p q : UniPoly R} (hq : q.trim ≠ 0) : degree (p.div q) ≤ degree p := by
+  sorry
+
 end Operations
 
 namespace OperationsC
@@ -826,6 +887,31 @@ theorem toPoly_add {p q : UniPoly Q} : (add_raw p q).toPoly = p.toPoly + q.toPol
   ext n
   rw [coeff_add, coeff_toPoly, coeff_toPoly, coeff_toPoly, add_coeff?]
 
+/-- `UniPoly` subtraction is mapped to `Polynomial` substraction -/
+theorem toPoly_sub {p q : UniPoly Q} [BEq Q] [LawfulBEq Q] :
+    (p - q).toPoly = p.toPoly - q.toPoly := by
+  ext n
+  rw [coeff_toPoly, coeff_sub, coeff_toPoly, coeff_toPoly]
+  change (UniPoly.sub p q).coeff n = p.coeff n - q.coeff n
+  rw [UniPoly.sub, UniPoly.add]
+  rw [Trim.coeff_eq_coeff (p := p.add_raw q.neg)]
+  rw [add_coeff? p q.neg n]
+  rw [neg_coeff q n]
+  rw [sub_eq_add_neg]
+
+theorem toPoly_divByMonic {R : Type*} [Field R] [BEq R] {p q : UniPoly R} (hq : monic q) :
+    (divByMonic p q).toPoly = p.toPoly /ₘ q.toPoly := by
+  sorry
+
+/-- `UniPoly` division is mapped to `Polynomial` division -/
+theorem toPoly_div {R : Type*} [Field R] [BEq R] {p q : UniPoly R} :
+    (div p q).toPoly = Polynomial.div p.toPoly q.toPoly := by
+  unfold div Polynomial.div
+  simp only [smul_eq_mul]
+  -- simp_rw [toPoly_mul]
+  sorry
+
+
 /-- trimming doesn't change the `toPoly` image -/
 lemma toPoly_trim [LawfulBEq R] {p : UniPoly R} : p.trim.toPoly = p.toPoly := by
   ext n
@@ -881,6 +967,97 @@ theorem eval_toImpl_eq_eval [LawfulBEq R] (x : R) (p : R[X]) : p.toImpl.eval x =
 /-- corollary: evaluation stays the same after trimming -/
 lemma eval_trim_eq_eval [LawfulBEq R] (x : R) (p : UniPoly R) : p.trim.eval x = p.eval x := by
   rw [← toImpl_toPoly, eval_toImpl_eq_eval, eval_toPoly_eq_eval]
+
+-- TODO is this the right place?
+/-- degree is the mathlib degree + 1 -/
+theorem degree_toPoly {p : UniPoly R} [LawfulBEq R]
+    (hnz : ∃ i, p.coeff i ≠ 0) : p.degree = p.toPoly.natDegree + 1 := by
+  let q := p.trim
+  have deg_p_eq_sz_q : p.degree = q.size := by simpa [q] using (Trim.size_eq_degree (p := p)).symm
+  have q_nonempty : 0 < q.size := by
+    rcases hnz with ⟨i, hi⟩
+    cases Trim.elim p with
+    | inl h =>
+        have : ∀ j, p.coeff j = 0 := by
+          intro j
+          rcases lt_or_ge j p.size with hj | hj
+          · simpa [UniPoly.coeff, Array.getD_eq_getD_getElem?, hj] using h.2 j hj
+          · simp [UniPoly.coeff, Array.getD_eq_getD_getElem?, Array.getElem?_eq_none hj]
+        exact (hi (this i)).elim
+    | inr h =>
+        rcases h with ⟨k, h_extract, h_nz, -⟩
+        have : q.size = k + 1 := by
+          have := congrArg Array.size h_extract
+          simpa [q, Array.size_extract, Nat.succ_le_of_lt k.is_lt] using this
+        simp [this]
+  have coeff_last_nonzero : p.toPoly.coeff (q.size - 1) ≠ 0 := by
+    have q_canon : q.trim = q := by simpa [q] using Trim.trim_twice (p := p)
+    have hlast : q.getLast q_nonempty ≠ 0 := (Trim.canonical_iff (p := q)).mp q_canon q_nonempty
+    have hqcoeff : q.coeff (q.size - 1) ≠ 0 := by
+      have hlt : q.size - 1 < q.size := Nat.pred_lt_self q_nonempty
+      have hget : q[q.size - 1] ≠ 0 := by simpa [Array.getLast] using hlast
+      have hcoeff : q.coeff (q.size - 1) = q[q.size - 1] := by
+        simp [hlt]
+      simpa [hcoeff]
+    have hpq : p.coeff (q.size - 1) = q.coeff (q.size - 1) := by
+      have := Trim.coeff_eq_coeff (p := p) (i := q.size - 1)
+      simpa [q] using this.symm
+    have hpcoeff : p.coeff (q.size - 1) ≠ 0 := by simpa [hpq] using hqcoeff
+    simpa [coeff_toPoly] using hpcoeff
+  have natDeg_eq : p.toPoly.natDegree = q.size - 1 := by
+    apply le_antisymm
+    · exact Polynomial.natDegree_le_iff_coeff_eq_zero.mpr (fun m hm => by
+        have hsucc : (q.size - 1).succ ≤ m := Nat.succ_le_of_lt hm
+        have hadd : (q.size - 1).succ = q.size := Nat.succ_pred_eq_of_pos q_nonempty
+        have hge : q.size ≤ m := by
+          simp_all only [Nat.succ_eq_add_one]
+        have hq : q.coeff m = 0 := by
+          simp [UniPoly.coeff, Array.getD_eq_getD_getElem?, Array.getElem?_eq_none hge]
+        have hpq : p.coeff m = q.coeff m := by
+          have := Trim.coeff_eq_coeff (p := p) (i := m)
+          simpa [q] using this.symm
+        have hp : p.coeff m = 0 := by simpa [hpq] using hq
+        simp [coeff_toPoly, hp])
+    · exact Polynomial.le_natDegree_of_ne_zero coeff_last_nonzero
+  calc
+    p.degree = q.size := deg_p_eq_sz_q
+    _ = (q.size - 1) + 1 := (Nat.succ_pred_eq_of_pos q_nonempty).symm
+    _ = p.toPoly.natDegree + 1 := by simp [natDeg_eq]
+
+/-- variant of `degree_toPoly` solving for `p.toPoly.natDegree` -/
+theorem degree_toPoly' {p : UniPoly R} [LawfulBEq R]
+    (hnz : ∃ i, p.coeff i ≠ 0) : p.degree - 1 = p.toPoly.natDegree := by
+  simp_all only [Array.getD_eq_getD_getElem?, ne_eq, degree_toPoly, add_tsub_cancel_right]
+
+
+omit [BEq R] in
+/-- a constant `UniPoly` `toPoly` is a constant `Polynomial` -/
+@[simp]
+theorem toPoly_C {x : R} : (UniPoly.C x).toPoly = Polynomial.C x := by
+  ext n
+  rw [coeff_toPoly, Polynomial.coeff_C]
+  cases n with
+  | zero =>
+      simp [UniPoly.C, coeff, Array.getD_eq_getD_getElem?]
+  | succ k =>
+      simp [UniPoly.C, coeff, Array.getD_eq_getD_getElem?]
+
+omit [BEq R] in
+/-- the X `UniPoly` `toPoly` is the X `Polynomial` -/
+@[simp]
+theorem toPoly_X : (UniPoly.X).toPoly = (Polynomial.X : R[X]) := by
+  ext n
+  rw [coeff_toPoly, Polynomial.coeff_X]
+  cases n with
+  | zero =>
+      simp [UniPoly.X, coeff, Array.getD_eq_getD_getElem?]
+  | succ k =>
+      cases k with
+      | zero =>
+          simp [UniPoly.X, coeff, Array.getD_eq_getD_getElem?]
+      | succ k' =>
+          simp [UniPoly.X, coeff, Array.getD_eq_getD_getElem?]
+
 
 end ToPoly
 
@@ -987,7 +1164,6 @@ end QuotientUniPoly
 end Equiv
 
 namespace Lagrange
-
 -- unique polynomial of degree n that has nodes at ω^i for i = 0, 1, ..., n-1
 def nodal {R : Type*} [Ring R] (n : ℕ) (ω : R) : UniPoly R := sorry
   -- .mk (Array.range n |>.map (fun i => ω^i))
