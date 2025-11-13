@@ -189,12 +189,7 @@ theorem codeDist'_subsingleton [Subsingleton C] : ‖C‖₀' = ⊤ := by
 theorem dist'_eq_dist : ‖C‖₀'.toNat = ‖C‖₀ := by
   by_cases h : Subsingleton C
   · simp
-  · simp [dist, dist']
-    have : dist' C ≠ ⊤ := by sorry
-    sorry
-    -- apply (ENat.toNat_eq_iff this).mp
-    -- apply Finset.min_eq_top.mp
-    -- simp [this]
+  · sorry
 
 section
 
@@ -607,20 +602,9 @@ noncomputable def byCheckMatrix [CommRing F] (H : Matrix ι κ F) : LinearCode �
 noncomputable def disFromHammingNorm [Semiring F] [DecidableEq F] (LC : LinearCode ι F) : ℕ :=
   sInf {d | ∃ u ∈ LC, u ≠ 0 ∧ hammingNorm u ≤ d}
 
--- Require `[CommRing R]`
-theorem dist_eq_dist_from_HammingNorm [Semiring F] [DecidableEq F] (LC : LinearCode ι F) :
+theorem dist_eq_dist_from_HammingNorm [CommRing F] [DecidableEq F] (LC : LinearCode ι F) :
     Code.dist LC.carrier = disFromHammingNorm LC := by
-  simp [Code.dist, disFromHammingNorm]
-  congr; unfold setOf; funext d
-  apply Eq.propIntro <;> intro h
-  · obtain ⟨u, hu, v, hv, huv, hDist⟩ := h
-    -- let w := u - v
-    -- have hw : w ∈ C := by simp [Submodule.add_mem]
-    -- refine ⟨w, And.intro hw ⟨v, And.intro hv ⟨huv, ?_⟩⟩⟩
-    sorry
-  · obtain ⟨u, hu, hNorm, hDist⟩ := h
-    -- refine ⟨u, And.intro hu ⟨v, And.intro hv ⟨huv, ?_⟩⟩⟩
-    sorry
+  sorry
 
 /--
 The dimension of a linear code.
@@ -685,8 +669,11 @@ lemma dist_UB [CommRing F] {LC : LinearCode ι F} :
   exact sInf.sInf_UB_of_le_UB fun s ⟨_, _, _, s_def⟩ ↦
           s_def ▸ le_trans (card_le_card (subset_univ _)) (le_refl _)
 
-theorem singletonBound [Semiring F] (LC : LinearCode ι F) :
-  dim LC ≤ length LC - Code.minDist (LC : Set (ι → F)) + 1 := by sorry
+
+theorem singletonBound [CommRing F] [StrongRankCondition F]
+  (LC : LinearCode ι F) :
+  dim LC ≤ length LC - Code.minDist (LC : Set (ι → F)) + 1 := by
+  sorry
 
 
 /-- The interleaving of a linear code `LC` over index set `ι` is the submodule spanned by
@@ -697,8 +684,6 @@ def interleaveCode [Semiring F] [DecidableEq F] (C : Submodule F (n → F)) (ι 
 
 notation:20 C "^⋈" ι => interleaveCode C ι
 
--- instance : Fintype (interleaveCode C ι) := sorry
-
 /-- Interleave two functions `u v : α → β`. -/
 def Function.interleave₂ {α β : Type*} (u v : α → β) : (Fin 2) × α → β :=
   Function.uncurry (fun a => if a = 0 then u else v)
@@ -706,9 +691,10 @@ def Function.interleave₂ {α β : Type*} (u v : α → β) : (Fin 2) × α →
 notation:20 u "⋈" v => Function.interleave₂ u v
 
 /-- **Singleton bound** for linear codes -/
-theorem singleton_bound_linear [Semiring F] (LC : LinearCode ι F) :
-    Module.finrank F LC ≤ card n - (Code.dist LC.carrier) + 1 := by sorry
-  -- have : (ofFinite C).card = (ofFinite R).card ^ (Module.finrank R C) := by
+theorem singleton_bound_linear [CommRing F] [StrongRankCondition F]
+    (LC : LinearCode ι F) :
+    Module.finrank F LC ≤ card ι - (Code.dist LC.carrier) + 1 := by
+  sorry
 
 end
 
